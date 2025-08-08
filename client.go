@@ -4,14 +4,17 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"github.com/ge-fei-fan/clouddrive2api/clouddrive"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/ge-fei-fan/clouddrive2api/clouddrive"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const DEFAULT_BUFFER_SIZE = 8192 // 默认缓冲区大小
@@ -172,4 +175,97 @@ func (c *Client) GetSubFiles(path string, forceRefresh bool, checkExpires bool) 
 		return nil, err
 	}
 	return subFilesReply, err
+}
+
+// RefreshAllDirectories 遍历并刷新所有目录
+func (c *Client) RefreshAllDirectories() error {
+	// 首先获取所有云API
+	cloudAPIs, err := c.GetAllCloudApis()
+	if err != nil {
+		return err
+	}
+
+	// 遍历每个云API
+	for _, api := range cloudAPIs.Apis {
+		fmt.Printf("正在处理云存储: %s (用户: %s)\n", api.Name, api.UserName)
+
+		// 从根目录开始遍历
+		err := c.refreshDirectoryRecursively("/", api.Name, api.UserName)
+		if err != nil {
+			fmt.Printf("处理云存储 %s 时出错: %v\n", api.Name, err)
+			continue
+		}
+	}
+
+	return nil
+}
+
+// refreshDirectoryRecursively 递归刷新目录
+func (c *Client) refreshDirectoryRecursively(path, cloudName, userName string) error {
+	fmt.Printf("正在刷新目录: %s\n", path)
+
+	// 获取子文件列表，强制刷新
+	subFiles, err := c.GetSubFiles(path, true, true)
+	if err != nil {
+		return fmt.Errorf("获取目录 %s 的子文件失败: %v", path, err)
+	}
+
+	// 遍历子文件
+	for _, file := range subFiles.SubFiles {
+		// 如果是目录，递归处理
+		if file.IsDirectory {
+			fmt.Printf("发现子目录: %s\n", file.FullPathName)
+			err := c.refreshDirectoryRecursively(file.FullPathName, cloudName, userName)
+			if err != nil {
+				fmt.Printf("刷新子目录 %s 时出错: %v\n", file.FullPathName, err)
+				continue
+			}
+		}
+	}
+
+	return nil
+}
+
+// RefreshSpecificDirectory 刷新指定目录
+func (c *Client) RefreshSpecificDirectory(path string) error {
+	fmt.Printf("正在刷新指定目录: %s\n", path)
+
+	// 获取子文件列表，强制刷新
+	subFiles, err := c.GetSubFiles(path, true, true)
+	if err != nil {
+		return fmt.Errorf("获取目录 %s 的子文件失败: %v", path, err)
+	}
+
+	fmt.Printf("目录 %s 刷新完成，包含 %d 个文件/文件夹\n", path, len(subFiles.SubFiles))
+	return nil
+}
+
+// GetAllCloudApis 获取所有云API
+func (c *Client) GetAllCloudApis() (*clouddrive.CloudAPIList, error) {
+	res, err := c.cd.GetAllCloudApis(c.contextWithHeader, &emptypb.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// GetDirectoryInfo 获取目录信息
+func (c *Client) GetDirectoryInfo(path string) (*clouddrive.CloudDriveFile, error) {
+	res, err := c.cd.FindFileByPath(c.contextWithHeader, &clouddrive.FindFileByPathRequest{
+		ParentPath: filepath.Dir(path),
+		Path:       filepath.Base(path),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// ListDirectoryContents 列出目录内容
+func (c *Client) ListDirectoryContents(path string, forceRefresh bool) ([]*clouddrive.CloudDriveFile, error) {
+	subFiles, err := c.GetSubFiles(path, forceRefresh, true)
+	if err != nil {
+		return nil, err
+	}
+	return subFiles.SubFiles, nil
 }
