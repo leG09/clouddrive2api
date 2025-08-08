@@ -8,7 +8,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"net/url"
 
 	"github.com/ge-fei-fan/clouddrive2api/clouddrive"
 	"google.golang.org/grpc"
@@ -51,7 +54,17 @@ func (c *Client) Close() {
 }
 
 func (c *Client) Login() error {
-	conn, err := grpc.Dial(c.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// 兼容传入 http(s):// 前缀或包含路径的地址
+	dialAddr := strings.TrimSpace(c.addr)
+	if strings.HasPrefix(dialAddr, "http://") || strings.HasPrefix(dialAddr, "https://") {
+		if u, err := url.Parse(dialAddr); err == nil {
+			if u.Host != "" {
+				dialAddr = u.Host
+			}
+		}
+	}
+
+	conn, err := grpc.Dial(dialAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
@@ -178,7 +191,7 @@ func (c *Client) GetSubFiles(path string, forceRefresh bool, checkExpires bool) 
 }
 
 // RefreshAllDirectories 遍历并刷新所有目录
-func (c *Client) RefreshAllDirectories() error {
+func (c *Client) RefreshAllDirectories(excludePaths []string) error {
 	// 首先获取所有云API
 	cloudAPIs, err := c.GetAllCloudApis()
 	if err != nil {
@@ -190,7 +203,7 @@ func (c *Client) RefreshAllDirectories() error {
 		fmt.Printf("正在处理云存储: %s (用户: %s)\n", api.Name, api.UserName)
 
 		// 从根目录开始遍历
-		err := c.refreshDirectoryRecursively("/", api.Name, api.UserName)
+		err := c.refreshDirectoryRecursively("/", api.Name, api.UserName, excludePaths)
 		if err != nil {
 			fmt.Printf("处理云存储 %s 时出错: %v\n", api.Name, err)
 			continue
@@ -201,8 +214,16 @@ func (c *Client) RefreshAllDirectories() error {
 }
 
 // refreshDirectoryRecursively 递归刷新目录
-func (c *Client) refreshDirectoryRecursively(path, cloudName, userName string) error {
+func (c *Client) refreshDirectoryRecursively(path, cloudName, userName string, excludePaths []string) error {
 	fmt.Printf("正在刷新目录: %s\n", path)
+
+	// 检查当前路径是否在排除列表中
+	for _, excludePath := range excludePaths {
+		if path == excludePath {
+			fmt.Printf("跳过排除的目录: %s\n", path)
+			return nil
+		}
+	}
 
 	// 获取子文件列表，强制刷新
 	subFiles, err := c.GetSubFiles(path, true, true)
@@ -215,7 +236,7 @@ func (c *Client) refreshDirectoryRecursively(path, cloudName, userName string) e
 		// 如果是目录，递归处理
 		if file.IsDirectory {
 			fmt.Printf("发现子目录: %s\n", file.FullPathName)
-			err := c.refreshDirectoryRecursively(file.FullPathName, cloudName, userName)
+			err := c.refreshDirectoryRecursively(file.FullPathName, cloudName, userName, excludePaths)
 			if err != nil {
 				fmt.Printf("刷新子目录 %s 时出错: %v\n", file.FullPathName, err)
 				continue

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ge-fei-fan/clouddrive2api"
@@ -19,9 +20,44 @@ func main() {
 		command    = flag.String("command", "list", "命令: list, refresh-all, refresh-dir, upload")
 		path       = flag.String("path", "", "目录路径")
 		file       = flag.String("file", "", "文件路径 (用于上传)")
+		exclude    = flag.String("exclude", "", "排除的目录路径，多个路径用逗号分隔")
 		verbose    = flag.Bool("verbose", false, "显示详细信息")
 	)
+
+	// 自定义 -h 帮助信息
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "CloudDrive CLI\n\n")
+		fmt.Fprintf(os.Stderr, "用法:\n  %s [flags]\n\n", os.Args[0])
+		fmt.Fprintln(os.Stderr, "命令:")
+		fmt.Fprintln(os.Stderr, "  list          列出云存储")
+		fmt.Fprintln(os.Stderr, "  refresh-all   刷新所有目录（支持 -exclude）")
+		fmt.Fprintln(os.Stderr, "  refresh-dir   刷新指定目录（需 -path）")
+		fmt.Fprintln(os.Stderr, "  list-dir      列出目录内容（可选 -path，默认 /）")
+		fmt.Fprintln(os.Stderr, "  upload        上传文件（需 -file，使用默认上传目录）")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "参数:")
+		flag.PrintDefaults()
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "说明:")
+		fmt.Fprintln(os.Stderr, "  -server 支持 'host:port' 或 'http(s)://host:port'，程序会自动处理协议前缀")
+		fmt.Fprintln(os.Stderr, "  -exclude 为逗号分隔的路径列表，例如 '/tmp,/系统文件夹'")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "示例:")
+		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=refresh-all -exclude='/tmp,/temp'")
+		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=refresh-dir -path='/我的网盘/电影'")
+		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=list-dir -path='/'")
+	}
 	flag.Parse()
+
+	// 检查未知命令
+	if *command != "list" && *command != "refresh-all" && *command != "refresh-dir" && *command != "list-dir" && *command != "upload" {
+		fmt.Println("未知命令:", *command)
+		fmt.Println("可用命令: list, refresh-all, refresh-dir, list-dir, upload")
+		fmt.Println("示例:")
+		fmt.Println("  ./clouddrive-cli -command=refresh-all -exclude='/tmp,/temp'")
+		fmt.Println("  ./clouddrive-cli -command=refresh-all -exclude='/系统文件夹' -verbose")
+		os.Exit(1)
+	}
 
 	// 创建客户端
 	client := clouddrive2api.NewClient(*serverAddr, *username, *password, "/离线下载", "/上传文件夹")
@@ -58,7 +94,21 @@ func main() {
 	case "refresh-all":
 		// 刷新所有目录
 		fmt.Println("开始刷新所有目录...")
-		err = client.RefreshAllDirectories()
+
+		// 解析排除路径
+		var excludePaths []string
+		if *exclude != "" {
+			excludePaths = strings.Split(*exclude, ",")
+			// 清理路径（去除空格）
+			for i, path := range excludePaths {
+				excludePaths[i] = strings.TrimSpace(path)
+			}
+			if *verbose {
+				fmt.Printf("排除的目录: %v\n", excludePaths)
+			}
+		}
+
+		err = client.RefreshAllDirectories(excludePaths)
 		if err != nil {
 			log.Fatalf("刷新所有目录失败: %v", err)
 		}
@@ -113,8 +163,8 @@ func main() {
 		fmt.Println("文件上传完成!")
 
 	default:
+		// 这里不应该到达，因为已经在前面检查了命令
 		fmt.Println("未知命令:", *command)
-		fmt.Println("可用命令: list, refresh-all, refresh-dir, list-dir, upload")
 		os.Exit(1)
 	}
 
