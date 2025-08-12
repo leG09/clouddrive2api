@@ -31,7 +31,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "命令:")
 		fmt.Fprintln(os.Stderr, "  list          列出云存储")
 		fmt.Fprintln(os.Stderr, "  refresh-all   刷新所有目录（支持 -exclude）")
-		fmt.Fprintln(os.Stderr, "  refresh-dir   刷新指定目录（需 -path）")
+		fmt.Fprintln(os.Stderr, "  refresh-dir   刷新指定目录（需 -path；可用逗号分隔多个路径）")
 		fmt.Fprintln(os.Stderr, "  list-dir      列出目录内容（可选 -path，默认 /）")
 		fmt.Fprintln(os.Stderr, "  upload        上传文件（需 -file，使用默认上传目录）")
 		fmt.Fprintln(os.Stderr, "")
@@ -44,7 +44,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "示例:")
 		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=refresh-all -exclude='/tmp,/temp'")
-		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=refresh-dir -path='/我的网盘/电影'")
+		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=refresh-dir -path='/我的网盘/电影,/我的网盘/剧集'")
 		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=list-dir -path='/'")
 	}
 	flag.Parse()
@@ -115,16 +115,24 @@ func main() {
 		fmt.Println("所有目录刷新完成!")
 
 	case "refresh-dir":
-		// 刷新指定目录
+		// 刷新指定目录（支持多个，以逗号分隔）
 		if *path == "" {
-			log.Fatal("请指定要刷新的目录路径 (-path)")
+			log.Fatal("请指定要刷新的目录路径 (-path)，多个用逗号分隔")
 		}
-		fmt.Printf("开始刷新目录: %s\n", *path)
-		err = client.RefreshSpecificDirectory(*path)
-		if err != nil {
-			log.Fatalf("刷新目录失败: %v", err)
+		pathList := strings.Split(*path, ",")
+		for _, p := range pathList {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			fmt.Printf("开始刷新目录: %s\n", p)
+			err = client.RefreshSpecificDirectory(p)
+			if err != nil {
+				fmt.Printf("刷新目录失败 %s: %v\n", p, err)
+				continue
+			}
+			fmt.Printf("目录 %s 刷新完成!\n", p)
 		}
-		fmt.Printf("目录 %s 刷新完成!\n", *path)
 
 	case "list-dir":
 		// 列出目录内容

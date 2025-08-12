@@ -178,16 +178,29 @@ func (c *Client) Upload(filePath, fileName string) error {
 }
 
 func (c *Client) GetSubFiles(path string, forceRefresh bool, checkExpires bool) (*clouddrive.SubFilesReply, error) {
+	stream, err := c.cd.GetSubFiles(
+		c.contextWithHeader,
+		&clouddrive.ListSubFileRequest{Path: path, ForceRefresh: forceRefresh, CheckExpires: &checkExpires},
+	)
+	if err != nil {
+		return nil, err
+	}
 
-	res, err := c.cd.GetSubFiles(c.contextWithHeader, &clouddrive.ListSubFileRequest{Path: path, ForceRefresh: forceRefresh, CheckExpires: &checkExpires})
-	if err != nil {
-		return nil, err
+	var all []*clouddrive.CloudDriveFile
+	for {
+		msg, recvErr := stream.Recv()
+		if recvErr == io.EOF {
+			break
+		}
+		if recvErr != nil {
+			return nil, recvErr
+		}
+		if msg != nil && len(msg.SubFiles) > 0 {
+			all = append(all, msg.SubFiles...)
+		}
 	}
-	subFilesReply, err := res.Recv()
-	if err != nil {
-		return nil, err
-	}
-	return subFilesReply, err
+
+	return &clouddrive.SubFilesReply{SubFiles: all}, nil
 }
 
 // RefreshAllDirectories 遍历并刷新所有目录
