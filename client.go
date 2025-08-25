@@ -129,6 +129,10 @@ func (c *Client) ListAllOfflineFiles(cloudName, cloudAccountId string, page uint
 }
 
 func (c *Client) Upload(filePath, fileName string) error {
+	return c.UploadToPath(filePath, fileName, c.UploadFolder)
+}
+
+func (c *Client) UploadToPath(filePath, fileName, targetPath string) error {
 	var createFileResult *clouddrive.CreateFileResult
 	var file *os.File
 	if fileName == "" {
@@ -142,7 +146,7 @@ func (c *Client) Upload(filePath, fileName string) error {
 			_, _ = c.cd.CloseFile(c.contextWithHeader, &clouddrive.CloseFileRequest{FileHandle: createFileResult.FileHandle})
 		}
 	}()
-	createFileResult, err := c.cd.CreateFile(c.contextWithHeader, &clouddrive.CreateFileRequest{ParentPath: c.UploadFolder, FileName: fileName})
+	createFileResult, err := c.cd.CreateFile(c.contextWithHeader, &clouddrive.CreateFileRequest{ParentPath: targetPath, FileName: fileName})
 	if err != nil {
 		return err
 	}

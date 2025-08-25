@@ -14,9 +14,9 @@ import (
 func main() {
 	// 命令行参数
 	var (
-		serverAddr = flag.String("server", "", "CloudDrive服务器地址")
-		username   = flag.String("username", "", "用户名")
-		password   = flag.String("password", "", "密码")
+		serverAddr = flag.String("server", "http://2.56.98.127:19798", "CloudDrive服务器地址")
+		username   = flag.String("username", "sunyuxuan970227@gmail.com", "用户名")
+		password   = flag.String("password", "115guazai", "密码")
 		command    = flag.String("command", "list", "命令: list, refresh-all, refresh-dir, upload")
 		path       = flag.String("path", "", "目录路径")
 		file       = flag.String("file", "", "文件路径 (用于上传)")
@@ -33,7 +33,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "  refresh-all   刷新所有目录（支持 -exclude）")
 		fmt.Fprintln(os.Stderr, "  refresh-dir   刷新指定目录（需 -path；可用逗号分隔多个路径）")
 		fmt.Fprintln(os.Stderr, "  list-dir      列出目录内容（可选 -path，默认 /）")
-		fmt.Fprintln(os.Stderr, "  upload        上传文件（需 -file，使用默认上传目录）")
+		fmt.Fprintln(os.Stderr, "  upload        上传文件（需 -file，可选 -path 指定目标目录）")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "参数:")
 		flag.PrintDefaults()
@@ -46,6 +46,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=refresh-all -exclude='/tmp,/temp'")
 		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=refresh-dir -path='/我的网盘/电影,/我的网盘/剧集'")
 		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=list-dir -path='/'")
+		fmt.Fprintln(os.Stderr, "  "+os.Args[0]+" -command=upload -file='/path/to/file.txt' -path='/我的文档'")
 	}
 	flag.Parse()
 
@@ -164,7 +165,7 @@ func main() {
 			*path = "/"
 		}
 		fmt.Printf("正在上传文件: %s 到目录: %s\n", *file, *path)
-		err = client.Upload(*file, "")
+		err = client.UploadToPath(*file, "", *path)
 		if err != nil {
 			log.Fatalf("上传文件失败: %v", err)
 		}
